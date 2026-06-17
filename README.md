@@ -1,145 +1,140 @@
-# EyeMech ε3.2 — Developer Documentation
+# EYEMECH ε3.2 control code adapted for ESP32-S3 with PCA9685 Full Web Dashboard Control
+Based on Will Cogley's Eye Mechanism
+
+<div align="center">
+  <a href="https://youtube.com/shorts/8luMGPw0Tpo">
+    <img src="https://img.youtube.com/vi/8luMGPw0Tpo/hqdefault.jpg" alt="EYEMECH ε3.2 demo — click to watch" width="360">
+  </a>
+  <br>
+  <em>▶ Click to watch the demo</em>
+</div>
 
 ## Overview
-EyeMech ε3.2 is an advanced animatronic eye control system for the ESP32-S3. It drives six servos (Left/Right pan, Up/Down tilt, and four eyelid servos) through a PCA9685 PWM driver over I2C, and serves its own offline Web Dashboard with a live digital twin of the eyes.
 
-The mechanism is built on **Will Cogley's animatronic eye design** — full credit for the original 3D-printed eye mechanism goes to his work. This firmware is an independent ESP32-S3 control layer for that hardware: a self-hosted wireless dashboard, a research-backed **Personality Engine** for lifelike autonomous behaviour, a **Choreography** keyframe player, and a guided **Servo Calibration Wizard** with persistent storage.
+EYEMECH ε3.2 turns Will Cogley's animatronic eye mechanism into a self-contained wireless prop. An **ESP32-S3** drives six servos through a **PCA9685** board and hosts its own **offline Wi-Fi dashboard** — no app to install, no internet, and no extra wiring beyond power, the servos, and the I2C link.
 
-The core strength of this version is its **Digital-Twin Architecture**: the dashboard renders two independent SVG eyes that mirror the real servo state in real time over a WebSocket, so behaviour can be developed and validated with or without hardware attached.
+Open the dashboard on your phone and you get a live on-screen twin of the eyes, autonomous lifelike behaviour, a choreography editor, and a guided calibration wizard. Everything is controlled from the web page — there are no joysticks, switches, or potentiometers to wire up.
 
----
+![EyeMech Control dashboard](TestingScreenshots/e2e-dashboard-full.png)
 
-## Hardware Configuration
+## Features
 
-### Core Components
-* **Microcontroller:** ESP32-S3
-* **PWM Driver:** PCA9685 (I2C: SDA=GPIO 4, SCL=GPIO 5)
-* **Servos:** 6x standard 180° hobby servos (Pan, Tilt, and 4 eyelid servos)
+- **Self-hosted dashboard** — the device is its own Wi-Fi hotspot and web server. Connect and control it from any phone, tablet, or laptop, fully offline.
+- **Live digital twin** — two on-screen SVG eyes mirror the real servos in real time, with a telemetry strip (mode, mood, per-eye aperture, blink, pan/tilt).
+- **Personality Engine** — an autonomous "Alive" mode with moods (Calm, Alert, Curious, Sleepy, Skittish), natural blinks, spontaneous glances, and ambient gestures.
+- **Choreography editor** — build and play your own keyframe sequences, or trigger ten built-in animations.
+- **Guided calibration wizard** — a 14-step flow walks you through setting safe limits for every servo, saved permanently on the device.
+- **Phone-friendly** — the layout reflows cleanly for small touch screens.
 
-### Servo Channel Map (PCA9685)
-| Channel | Constant | Function |
-| :--- | :--- | :--- |
-| 0 | `CH_LR` | Left/Right eye pan |
-| 1 | `CH_UD` | Up/Down eye tilt |
-| 2 | `CH_TL` | Top-Left eyelid |
-| 3 | `CH_BL` | Bottom-Left eyelid |
-| 4 | `CH_TR` | Top-Right eyelid |
-| 5 | `CH_BR` | Bottom-Right eyelid |
+## What You Need
 
-> **No physical inputs.** Earlier builds supported an analog joystick/potentiometer module; that provider has been removed. The web dashboard is now the sole control source, so the only wiring required is power, I2C, and the six servos.
+- ESP32-S3 dev board
+- PCA9685 16-channel PWM servo driver
+- 6 servos — 1 pan (left/right), 1 tilt (up/down), and 4 eyelids
+- A 5–6V power supply for the servos
+- Will Cogley's 3D-printed [animatronic eye mechanism](https://makerworld.com/es/models/1184807-animatronic-eye-mechanism-e3-2)
 
----
+> Earlier builds used a physical joystick, switches, and a trim pot. Those are **gone** — the web dashboard is now the only control surface.
 
-## Operational Modes
+## Wiring
 
-The system runs a non-blocking state machine. The active mode is selected from the dashboard (or via the HTTP API) and reported live in `/state` as `m`.
-
-| `m` | Mode | Behaviour |
-| :--- | :--- | :--- |
-| 0 | **Sleep** | Boot default. Eyes settle closed with a slow sinusoidal "breathing" aperture. Any web activity wakes the device to Alive. The system also auto-sleeps after 5 minutes of inactivity. |
-| 1 | **Alive** | The Personality Engine runs autonomously: spontaneous saccades, natural blinks, mood drift, and occasional ambient choreographies. The headline mode. |
-| 2 | **Manual** | Direct gaze control from the dashboard's virtual joystick. |
-| 3 | **Calibration** | Holds the servos still for the guided Calibration Wizard. Calibration-mutating routes are only honoured in this mode. |
-| 4 | **Perform** | Plays a choreography keyframe sequence, then returns to Alive (unless looping). |
-
-### The Personality Engine (Alive)
-Rather than fixed gestures, Alive expresses **moods** that bias gaze dynamics, blink rate, and aperture:
-`Calm`, `Alert`, `Curious`, `Sleepy`, and `Skittish`. Moods drift over time via a weighted random walk for a living, non-repeating feel.
-
-One-shot **expressions** can be fired at any time: `wink_l`, `wink_r`, `squint`, `wide`, and `skeptical`. A reactive **behaviour bus** provides higher-level events: `startle`, `greet`, `settle`, and `track` (gaze-follow a normalized target).
-
----
-
-## Wireless Control (Web Dashboard)
-
-The ESP32-S3 acts as its own wireless access point, so any phone or tablet can control it without external infrastructure or internet.
-
-### How to Connect
-1. **Scan for WiFi:** Look for the network SSID: `EyeMech-Controller`.
-2. **Connect:** Use the password: `eyemech123`.
-3. **Access Dashboard:** Open a browser to `http://192.168.4.1`, or `http://eyemech.local` (mDNS).
-
-### The Web Interface
-The dashboard is a responsive, touch-optimized single page served straight from flash:
-* **Digital Twin:** Two independent SVG eyes mirror the real servo state in real time, with a live telemetry strip (mode, mood, per-eye aperture, blink phase, pan/tilt angles).
-* **Mode Bar:** Switch between Sleep, Alive, Manual, Calibrate, and Choreography.
-* **Alive Controls:** One-tap mood selection and expression macros.
-* **Virtual Joystick:** A high-precision directional pad for Manual gaze.
-* **Choreography Editor:** Build/edit keyframe sequences, play/loop/stop transport, ten built-in canned sequences, and browser-side save/load.
-* **Calibration Wizard:** A guided 14-step flow to capture per-servo reference poses, with automatic safe-limit calculation and persistent storage.
-
-### Real-Time Telemetry (WebSocket)
-A WebSocket server on **port 81** pushes `/state` JSON to all connected clients (only on change) to drive the twin smoothly without polling.
-
----
-
-## Servo Calibration & Persistence
-
-Every servo is independently calibrated through the wizard — capturing its centre, travel endpoints, and safe limits — so the animation engine drives **calibrated angles** instead of hard-coded constants. The 14-step flow walks through the eyelids (L then R) and the gaze axes (horizontal then vertical), parking inactive servos to neutral at each step.
-
-Calibration is persisted to the ESP32's **NVS** (non-volatile storage) via `Preferences`, so it survives power cycles. `Save`, `Revert`, and `Reset` are exposed for safe iteration.
-
----
-
-## Developer API (HTTP)
-
-The device exposes a flat HTTP API on port 80. Useful for custom controllers (Python scripts, custom apps) or automated testing.
-
-### State & Health
-* `GET /state` — live telemetry JSON: `{m, mood, a[6], bp, ap, perf}` (mode, mood, six servo angles, blink phase, aperture %, active canned index).
-* `GET /health` — `{up, heap, fps}` uptime/heap/frame diagnostics.
-
-### Mode, Mood & Expression
-* `GET /mode?set=sleep|alive|manual|calibration` — switch operating mode.
-* `GET /mood?set=calm|alert|curious|sleepy|skittish` — set Alive mood (also forces Alive).
-* `GET /express?name=wink_l|wink_r|squint|wide|skeptical` — fire a one-shot expression.
-* `GET /behavior?do=startle|greet|settle|track[&x=&y=]` — trigger a reactive behaviour (`track` requires normalized `x`,`y`).
-* `GET /blink` — manual blink.
-
-### Gaze
-* `GET /update?lr=<int>&ud=<int>` — direct Manual gaze (ADC-style values around centre).
-* `GET /lookat?x=<0..1>&y=<0..1>` — normalized gaze target.
-
-### Choreography
-* `POST /seq` — upload a keyframe sequence (text body, `;`-separated frames).
-* `GET /play[?loop=1]` — play the loaded sequence (optionally looping).
-* `GET /stop` — stop and return to Alive.
-* `GET /canned?i=<0-9>` — load one of ten built-in sequences.
-
-### Calibration *(Calibration mode only, where noted)*
-* `GET /cal` — current calibration + live angles JSON.
-* `GET /cal/jog?ch=&d=[&edge=1]` — nudge a channel by a delta.
-* `GET /cal/go?ch=&a=` — drive a channel to an absolute angle.
-* `POST /cal/set?ch=&slot=center|enda|endb|safemin|safemax` — capture the live angle into a slot. *(409 outside Calibration.)*
-* `POST /cal/mirror` — seed right-eye lids from the left, reflected. *(409 outside Calibration.)*
-* `POST /cal/autosafe` — auto-compute safe limits around captured endpoints. *(409 outside Calibration.)*
-* `POST /cal/save` / `POST /cal/revert` — persist to / reload from NVS.
-* `POST /cal/reset` — restore default calibration. *(409 outside Calibration.)*
-
----
-
-## Codebase Structure
-* `EyeMech.ino` — main application: WiFi AP, web + WebSocket servers, the mode state machine, Personality Engine, choreography player, calibration, and NVS persistence.
-* `WebInterface.h` — the embedded HTML/CSS/JS payload for the dashboard and digital twin (streamed from PROGMEM).
-* `EyeMath.h` — gaze/aperture math helpers (host-testable).
-* `InputProvider.h` — the `WebInputProvider` that holds the latest dashboard gaze values.
-* `PCA9685.h` / `PCA9685.cpp` — low-level driver for the PWM expander over I2C.
-
----
-
-## Build & Flash
-* **Toolchain:** `arduino-cli` with the `esp32:esp32` core, FQBN `esp32:esp32:esp32s3`.
-* The sketch folder name must match the main `.ino` (`EyeMech/EyeMech.ino`).
-* External library: **WebSockets** by Links2004 (for the port-81 telemetry server); ESPmDNS and Preferences are built into the ESP32 core.
+The PCA9685 talks to the ESP32-S3 over I2C, and the six servos plug into the PCA9685's channels.
 
 ```
-arduino-cli compile --upload -p <PORT> --fqbn esp32:esp32:esp32s3 ./EyeMech
+ESP32-S3                 PCA9685
+-----------------        -----------------
+GND         ------->     GND
+5V          ------->     VCC
+GPIO4 (SDA) ------->     SDA
+GPIO5 (SCL) ------->     SCL
+
+PCA9685 Channel Map
+-----------------
+Channel 0   ------->     Left/Right pan servo
+Channel 1   ------->     Up/Down tilt servo
+Channel 2   ------->     Top-Left eyelid
+Channel 3   ------->     Bottom-Left eyelid
+Channel 4   ------->     Top-Right eyelid
+Channel 5   ------->     Bottom-Right eyelid
 ```
 
----
+Give the servos their own 5–6V supply with a common ground to the ESP32 — don't try to power them from the board's 3.3V rail.
 
-## Credits
-* **Animatronic eye mechanism / original design:** [Will Cogley](https://www.willcogley.com) — the physical eye hardware this firmware drives.
-* **EyeMech ε3.2 firmware:** ESP32-S3 control layer, Personality Engine, digital twin, choreography, and calibration system.
+## Getting Started
 
-> **Note:** The WiFi password is intentionally simple and hard-coded — this is a self-contained, offline access-point prop, not an internet-connected device.
+### 1. Flash the firmware
+
+The firmware is an Arduino sketch in the `EyeMech/` folder. The easiest path is [`arduino-cli`](https://arduino.github.io/arduino-cli/) with the ESP32 core installed:
+
+```
+arduino-cli compile --upload -p <YOUR_PORT> --fqbn esp32:esp32:esp32s3 ./EyeMech
+```
+
+One external library is required: **WebSockets by Links2004** (install it via the Library Manager). You can also open `EyeMech/EyeMech.ino` in the Arduino IDE and upload from there.
+
+### 2. Connect to the eyes
+
+Once flashed, the ESP32-S3 creates its own Wi-Fi network:
+
+1. **Find the network:** look for the Wi-Fi SSID `EyeMech-Controller`.
+2. **Join it:** the password is `eyemech123`.
+3. **Open the dashboard:** go to `http://192.168.4.1` (or `http://eyemech.local`) in any browser.
+
+### 3. Calibrate (first time only)
+
+Tap **Calibrate** and follow the 14-step wizard once to teach each servo its safe range. Your settings are saved on the device and survive power cycles.
+
+## Using the Dashboard
+
+Switch modes from the buttons under the digital twin.
+
+**Sleep** — the resting state. The eyes drift slowly closed and "breathe." Any tap wakes them. The eyes also drop back to sleep on their own after 5 minutes of no activity.
+
+![Sleep view](TestingScreenshots/e2e-view-sleep.png)
+
+**Alive** — the star of the show. The Personality Engine takes over: the eyes glance around, blink naturally, and shift mood on their own. Tap a **mood** (Calm, Alert, Curious, Sleepy, Skittish) to steer the feel, or fire a one-shot **expression** (wink, squint, wide, skeptical).
+
+![Alive view](TestingScreenshots/e2e-view-alive.png)
+
+**Manual** — you take the wheel. Drag the virtual joystick to aim the gaze, and use the **Blink** button on demand. The **Record** button captures your moves into a choreography.
+
+![Manual view](TestingScreenshots/e2e-view-manual.png)
+
+**Choreography** — build a sequence of keyframes, then play, loop, or stop it. Ten built-in animations are ready to go, and your own creations save in the browser.
+
+![Choreography view](TestingScreenshots/e2e-view-choreo.png)
+
+**Calibrate** — the guided wizard for setting each servo's centre, travel, and safe limits. The eyes hold still while you work, and you can save, revert, or reset.
+
+![Calibration wizard](TestingScreenshots/e2e-cal-step01.png)
+
+## How It Works
+
+The firmware runs a simple state machine — Sleep, Alive, Manual, Calibration, and Perform — and serves a single web page straight from the chip's flash. The dashboard talks to the device over a small HTTP API and a WebSocket that streams the live eye state, which is what keeps the on-screen twin in sync with the real servos. Because the ESP32-S3 is its own access point and web server, the whole thing works with no internet connection at all.
+
+Want the full technical details — the HTTP API, architecture, and code layout? See **[README_DEV.md](README_DEV.md)**.
+
+## Acknowledgments
+
+The physical eye mechanism is **Will Cogley's** design — full credit for the hardware goes to his fantastic work:
+
+- [Instructables Guide](https://www.instructables.com/Animatronic-Eye-Mechanism/)
+- [Patreon](https://www.patreon.com/c/Will_Cogley/posts)
+- [Documentation](https://willcogley.notion.site/EyeMech-3-2-1af24779b64d80b19edfdd795d4b90e5)
+- [3D Models](https://makerworld.com/es/models/1184807-animatronic-eye-mechanism-e3-2)
+
+This project is an independent ESP32-S3 + web-dashboard control layer for that hardware.
+
+## License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Feel free to open an issue or submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
